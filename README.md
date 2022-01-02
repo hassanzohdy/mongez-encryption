@@ -2,7 +2,7 @@
 
 A lightweight package for encrypting/decrypting and hashing data.
 
-> Under the hood, this package is built on [crypto js](crypto-js).
+> Under the hood, this package is built on [crypto js](https://www.npmjs.com/package/crypto-js).
 
 ## Installation
 
