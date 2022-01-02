@@ -16,13 +16,17 @@ Or
 
 This package is shipped with several functions such as:
 
-- [Data Encryption](#data-encryption).
-- [Data Decryption](#data-decryption).
-- [Encryption Configurations](#encryption-configurations)
-- [md5](#m5).
-- [sha1](#sha1).
-- [sha256](#sha256).
-- [sha512](#sha512).
+- [Mongez Encryption](#mongez-encryption)
+  - [Installation](#installation)
+  - [Usage](#usage)
+    - [Data Encryption](#data-encryption)
+    - [Data Decryption](#data-decryption)
+    - [Encryption Configurations](#encryption-configurations)
+    - [md5](#md5)
+    - [sha1](#sha1)
+    - [sha256](#sha256)
+    - [sha512](#sha512)
+  - [TODO](#todo)
 
 ### Data Encryption
 
