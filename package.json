@@ -1,6 +1,6 @@
 {
     "name": "@mongez/encryption",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "A simple package for variant encryption algorithms.",
     "main": "src/index.ts",
     "dependencies": {
@@ -15,6 +15,10 @@
         "sha256",
         "md5"
     ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/hassanzohdy/mongez-encryption"
+    },
     "author": "hassanzohdy",
     "license": "MIT"
 }
