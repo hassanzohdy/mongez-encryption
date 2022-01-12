@@ -1,6 +1,6 @@
 {
     "name": "@mongez/encryption",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "description": "A simple package for variant encryption algorithms.",
     "main": "src/index.ts",
     "dependencies": {
