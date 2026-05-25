@@ -1,24 +1,42 @@
 {
-    "name": "@mongez/encryption",
-    "version": "1.0.4",
-    "description": "A simple package for variant encryption algorithms.",
-    "main": "src/index.ts",
-    "dependencies": {
-        "crypto-js": "^4.0.0"
-    },
-    "keywords": [
-        "crypto",
-        "encryption",
-        "decryption",
-        "hash",
-        "sha1",
-        "sha256",
-        "md5"
-    ],
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/hassanzohdy/mongez-encryption"
-    },
-    "author": "hassanzohdy",
-    "license": "MIT"
+  "name": "@mongez/encryption",
+  "version": "1.1.0",
+  "description": "A thin wrapper around crypto-js for symmetric encrypt/decrypt of JSON-encodable values and the common hash functions (md5, sha1, sha256, sha512).",
+  "main": "src/index.ts",
+  "sideEffects": false,
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "crypto-js": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^2.1.0"
+  },
+  "keywords": [
+    "crypto",
+    "crypto-js",
+    "encryption",
+    "decryption",
+    "encrypt",
+    "decrypt",
+    "hash",
+    "md5",
+    "sha1",
+    "sha256",
+    "sha512",
+    "aes",
+    "tripledes",
+    "rabbit",
+    "rc4",
+    "mongez"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hassanzohdy/mongez-encryption"
+  },
+  "author": "hassanzohdy",
+  "license": "MIT"
 }

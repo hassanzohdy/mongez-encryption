@@ -1,0 +1,211 @@
+# @mongez/encryption — full reference
+
+> A thin wrapper around `crypto-js` for symmetric encrypt/decrypt of JSON-encodable values and the common hash functions. This is the concatenated reference; load `llms.txt` for the structured index instead.
+
+## Security boundary (read this first)
+
+These helpers are **NOT a substitute for purpose-built cryptography**. Below is what they do and do not provide; mismatching the threat model to the tool is a defect, not a usage error.
+
+| Concern | This package |
+|---|---|
+| Authenticated encryption (AEAD) | No. `AES.encrypt(text, passphrase)` from `crypto-js` runs AES-CBC with an MD5-based OpenSSL-style key derivation and a random salt. There is no MAC/auth tag — ciphertext can be tampered with undetectably. |
+| Modern key derivation | No. The OpenSSL-style KDF is one round of MD5. Real passphrase-derived keys want PBKDF2 / scrypt / argon2 with tunable cost. |
+| Salts and IVs | crypto-js picks a fresh salt per call when the key is a string passphrase, so the cipher is non-deterministic. No IV is exposed to the caller. |
+| Constant-time comparison | No. Hash outputs are hex strings; comparing them with `===` is not timing-safe. |
+| `md5` / `sha1` collision resistance | Broken. Both algorithms are unsafe for integrity or signatures; suitable only for non-adversarial fingerprinting (ETags, cache keys). |
+| FIPS / regulated environments | No. Pure-JS primitives, no validation, uses MD5 and AES-CBC-without-MAC. Inappropriate for several compliance regimes. |
+
+**Use for:** opaquing query-string parameters, masking values in logs, signing-free local-storage payloads, non-sensitive round-trips through string form.
+
+**Do NOT use for:** passwords, session tokens, PII at rest, payment data, secrets in transit, anything under a compliance regime, anything where integrity or non-repudiation matters. Reach for Node `crypto` with AES-GCM, libsodium, or a managed KMS.
+
+## Install
+
+```sh
+yarn add @mongez/encryption
+```
+
+The runtime dependency is [`crypto-js`](https://www.npmjs.com/package/crypto-js).
+
+## Public exports
+
+```ts
+import {
+  encrypt,
+  decrypt,
+  md5,
+  sha1,
+  sha256,
+  sha512,
+  setEncryptionConfigurations,
+  getEncryptionConfig,
+  type EncryptionConfigurations,
+} from "@mongez/encryption";
+```
+
+All exports ship from the package root — no subpath entry points.
+
+## encrypt(value, key?, driver?)
+
+```ts
+encrypt(value: any, key?: string, driver?: any): string
+```
+
+Behavior:
+
+1. Wraps the input as `{ data: value }` so primitives (`0`, `false`, `null`) survive JSON encoding.
+2. `JSON.stringify`s the wrapper.
+3. Hands the result to `driver.encrypt(plaintext, key)` — typically `AES` from `crypto-js`. The `driver` defaults to whatever was passed to `setEncryptionConfigurations`; the import-time default is `AES`.
+4. Returns crypto-js's `CipherParams.toString()` — a base64 string with the OpenSSL `Salted__` prefix.
+
+Throws:
+
+- If `key` is falsy (no per-call key, no configured default).
+- If `JSON.stringify(value)` throws — e.g. circular references, BigInt outside Node's serializer, or objects whose `toJSON` throws.
+
+Edge cases:
+
+- **`undefined`**: `JSON.stringify({ data: undefined })` returns `"{}"`. Encrypts and round-trips to `undefined`.
+- **`function`**: dropped at JSON time, same as `undefined`.
+- **Empty string**: round-trips cleanly.
+- **Unicode**: round-trips via UTF-8.
+- **Ciphertext is non-deterministic** for AES with a passphrase key — each call uses a fresh salt.
+
+## decrypt(cipher, key?, driver?)
+
+```ts
+decrypt(cipher: string, key?: string, driver?: any): any | null
+```
+
+Behavior:
+
+1. Calls `driver.decrypt(cipher, key)` and decodes the result to UTF-8.
+2. Returns `null` if the decoded plaintext is empty — crypto-js silently produces `""` when the key is wrong or the input is not a valid cipher.
+3. `JSON.parse`s the plaintext and returns the `.data` property of the wrapper.
+4. Catches any thrown error, logs it via `console.warn`, returns `null`.
+
+The function CANNOT distinguish:
+
+- "wrong key" from "tampered cipher" from "malformed input"
+
+…because the wrapper provides no authentication tag. If you need that distinction, layer HMAC-SHA256 over the ciphertext yourself (sign-then-encrypt), or switch to a real AEAD construction.
+
+Throws:
+
+- Only if `key` is falsy. Every other failure mode resolves to `null`.
+
+## md5 / sha1 / sha256 / sha512
+
+```ts
+md5(text: string): string
+sha1(text: string): string
+sha256(text: string): string
+sha512(text: string): string
+```
+
+All four return a lowercase hex string of the digest. Test vectors:
+
+```
+md5("123456")    === "e10adc3949ba59abbe56e057f20f883e"
+sha1("123456")   === "7c4a8d09ca3762af61e59520943dc26494f8941b"
+sha256("123456") === "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"
+sha512("123456") === "ba3253876aed6bc22d4a6ff53d8406c6ad864195ed144ab5c87621b6c233b548baeae6956df346ec8c17f5ea10f35ee3cbc514797ed7ddd3145464e2a0bab413"
+md5("")          === "d41d8cd98f00b204e9800998ecf8427e"
+```
+
+**Suitable uses**: content fingerprints, ETags, cache keys, deduplication.
+
+**Unsuitable uses**:
+
+- Password storage → use `bcrypt`, `scrypt`, or `argon2`. Plain hashes are too fast and lack per-record salts.
+- Message authentication → use HMAC. `crypto-js` ships `CryptoJS.HmacSHA256(message, key).toString()` if you want to stay in the same dep.
+- Equality checks on secret material → use a constant-time comparison.
+- Anywhere collision resistance matters and the input is attacker-controlled (signatures, certificates, deduplicating untrusted data) → `md5` and `sha1` are broken.
+
+## setEncryptionConfigurations(opts) / getEncryptionConfig(key)
+
+```ts
+type EncryptionConfigurations = {
+  key?: string;
+  driver?: any;       // any crypto-js cipher module (.encrypt / .decrypt)
+};
+
+setEncryptionConfigurations(opts: EncryptionConfigurations): void
+getEncryptionConfig(key: keyof EncryptionConfigurations): any
+```
+
+`setEncryptionConfigurations` shallow-merges over the existing defaults. The import-time defaults are `{ key: null, driver: AES }`, so if you only need AES, you only need to set `key`.
+
+These are module-level globals; in multi-tenant servers (one key per request) prefer passing `key` explicitly per call to avoid leaking one tenant's key into another's flow.
+
+## Patterns
+
+### Configured once, used everywhere
+
+```ts
+import AES from "crypto-js/aes";
+import { encrypt, decrypt, setEncryptionConfigurations } from "@mongez/encryption";
+
+setEncryptionConfigurations({
+  key: process.env.ENCRYPTION_KEY!,
+  driver: AES,
+});
+
+const c = encrypt({ userId: 42 });
+const v = decrypt(c);                  // { userId: 42 }
+```
+
+### Explicit per-call key
+
+```ts
+import AES from "crypto-js/aes";
+import { encrypt, decrypt } from "@mongez/encryption";
+
+const c = encrypt({ a: 1 }, tenantKey, AES);
+const v = decrypt(c, tenantKey, AES);
+```
+
+### Switching driver
+
+```ts
+import TripleDES from "crypto-js/tripledes";
+import { setEncryptionConfigurations, encrypt, decrypt } from "@mongez/encryption";
+
+setEncryptionConfigurations({ driver: TripleDES });   // key already set
+```
+
+Any `crypto-js` cipher module with `.encrypt(text, key)` / `.decrypt(cipher, key)` works. Prefer `AES`.
+
+### Adding integrity with HMAC (for when you need it)
+
+This pattern is OUTSIDE the package because the package intentionally does not provide it; if your threat model requires tamper-detection, build it explicitly:
+
+```ts
+import AES from "crypto-js/aes";
+import HmacSHA256 from "crypto-js/hmac-sha256";
+import { encrypt, decrypt } from "@mongez/encryption";
+
+function seal(value: unknown, encKey: string, macKey: string) {
+  const cipher = encrypt(value, encKey, AES);
+  const tag = HmacSHA256(cipher, macKey).toString();
+  return `${cipher}.${tag}`;
+}
+
+function open(sealed: string, encKey: string, macKey: string) {
+  const [cipher, tag] = sealed.split(".");
+  const expected = HmacSHA256(cipher, macKey).toString();
+  if (tag !== expected) return null;     // (non-constant-time; see notes)
+  return decrypt(cipher, encKey, AES);
+}
+```
+
+Note: the string-equality MAC check is NOT constant-time. For real use, swap in a constant-time compare or use a JWT/JWS library.
+
+## What this package does NOT do
+
+- Authenticated encryption / AEAD → Node `crypto.createCipheriv("aes-256-gcm", …)`, libsodium, or JWE.
+- Password hashing → `bcrypt`, `scrypt`, `argon2`.
+- Key derivation from passphrases → `crypto.scryptSync`, PBKDF2 with high cost, argon2.
+- Random IDs / UUIDs → `crypto.randomUUID`, `nanoid`.
+- Public-key crypto → Node `crypto.generateKeyPair`, libsodium.
+- Streaming or chunked encryption → use Node `crypto` streams.

@@ -6,7 +6,7 @@ export type EncryptionConfigurations = {
   /**
    * Set encryption default driver
    *
-   * @default AES
+   * @prefers AES
    */
   driver?: any;
 };
