@@ -8,7 +8,7 @@ description: |
 
 # Recipes
 
-Idiomatic compositions for `@mongez/encryption`. Pick the right tool for the threat first — read [`overview.md`](./overview.md) if you haven't yet.
+Idiomatic compositions for `@mongez/encryption`. Pick the right tool for the threat first — read [`overview`](../overview/SKILL.md) if you haven't yet.
 
 ## Opaqued URL token
 
