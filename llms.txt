@@ -20,18 +20,23 @@ Every export ships from the package root.
 ## Docs
 
 - [Overview](https://raw.githubusercontent.com/hassanzohdy/mongez-encryption/main/skills/overview.md): Pitch, install, mental model, security boundaries.
+  - *Auto-trigger:* First import from `@mongez/encryption`, or user asks what it does, whether it fits a use case, or about its security limits.
 - [README](https://raw.githubusercontent.com/hassanzohdy/mongez-encryption/main/README.md): Marketing-style index with the security notice.
 - [Changelog](https://raw.githubusercontent.com/hassanzohdy/mongez-encryption/main/CHANGELOG.md): Release notes.
 
 ## Reference (by namespace)
 
 - [Encrypt / Decrypt](https://raw.githubusercontent.com/hassanzohdy/mongez-encryption/main/skills/encrypt-decrypt.md): `encrypt(value, key?, driver?)`, `decrypt(cipher, key?, driver?)`, the JSON `{ data: value }` wrapper, the non-deterministic-cipher and `null`-on-failure semantics.
+  - *Auto-trigger:* Code imports `encrypt`/`decrypt`, or user asks how to round-trip a value, why decrypt returns `null`, or why ciphertexts differ.
 - [Hashes](https://raw.githubusercontent.com/hassanzohdy/mongez-encryption/main/skills/hashes.md): `md5`, `sha1`, `sha256`, `sha512`. Where each is appropriate. Why NOT to use them for password storage or message auth.
+  - *Auto-trigger:* Code imports `md5`/`sha1`/`sha256`/`sha512`, or user asks for a cache key, ETag, idempotency key, or whether a hash is safe for a use case.
 - [Configuration](https://raw.githubusercontent.com/hassanzohdy/mongez-encryption/main/skills/configuration.md): `setEncryptionConfigurations`, `getEncryptionConfig`, the module-level defaults and how the per-call overload falls back to them.
+  - *Auto-trigger:* Code imports `setEncryptionConfigurations`/`getEncryptionConfig`, or user sets a default key/driver, configures at boot, or asks about fallback semantics.
 
 ## Recipes
 
 - [Recipes](https://raw.githubusercontent.com/hassanzohdy/mongez-encryption/main/skills/recipes.md): Opaqued URL tokens, content-addressed cache keys, switching drivers (AES → TripleDES), wrapping with HMAC when you need integrity.
+  - *Auto-trigger:* User wants a full pattern — opaqued URL token, cache key, boot-time setup, HMAC layering, or distinguishing `null` decrypt from `null` value.
 
 ## Quick rules
 

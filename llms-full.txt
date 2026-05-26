@@ -4,6 +4,9 @@
 
 ## Security boundary (read this first)
 
+> **Auto-trigger:** code first imports anything from `@mongez/encryption` (`encrypt`, `decrypt`, `md5`, `sha1`, `sha256`, `sha512`, `setEncryptionConfigurations`, `getEncryptionConfig`, `EncryptionConfigurations`); user asks "what does @mongez/encryption do", "is @mongez/encryption secure for X", "can I store passwords / tokens / PII with this", or "should I use this or Node `crypto`"; file evaluates whether to adopt the package or audits its threat model.
+> **Skip when:** deep API reference on a specific export — use `mongez-encryption-encrypt-decrypt`, `mongez-encryption-hashes`, or `mongez-encryption-configuration`; ready-made composition patterns — use `mongez-encryption-recipes`; `@mongez/cache` encrypted entries — its own skill wraps this layer; questions strictly about `crypto-js` itself, libsodium, or Node `crypto`.
+
 These helpers are **NOT a substitute for purpose-built cryptography**. Below is what they do and do not provide; mismatching the threat model to the tool is a defect, not a usage error.
 
 | Concern | This package |
@@ -46,6 +49,9 @@ import {
 All exports ship from the package root — no subpath entry points.
 
 ## encrypt(value, key?, driver?)
+
+> **Auto-trigger:** code imports `encrypt` or `decrypt` from `@mongez/encryption`; user asks "how do I encrypt/decrypt a value", "why does decrypt return null", "how do I round-trip a token through a URL", or "why are two encryptions of the same input different"; file constructs opaque tokens, masks values in logs, or swaps the `crypto-js` driver (AES, TripleDES).
+> **Skip when:** hashing/fingerprinting — use `mongez-encryption-hashes`; configuring module-level defaults — use `mongez-encryption-configuration`; recipe-style compositions (URL token, HMAC layering) — use `mongez-encryption-recipes`; authenticated encryption / AEAD (use Node `crypto` AES-GCM, libsodium, or JWE); password storage (use `bcrypt`/`scrypt`/`argon2`); `@mongez/cache` encrypted entries (its own skill).
 
 ```ts
 encrypt(value: any, key?: string, driver?: any): string
@@ -96,6 +102,9 @@ Throws:
 
 ## md5 / sha1 / sha256 / sha512
 
+> **Auto-trigger:** code imports `md5`, `sha1`, `sha256`, or `sha512` from `@mongez/encryption`; user asks "how do I hash a string", "how do I make a stable cache key / ETag / idempotency key", "is md5/sha1 safe for X", or "how do I fingerprint a payload"; file derives a content-addressed key from JSON / a query / a request body.
+> **Skip when:** symmetric `encrypt`/`decrypt` — use `mongez-encryption-encrypt-decrypt`; module defaults — use `mongez-encryption-configuration`; password storage (use `bcrypt`/`scrypt`/`argon2`); message authentication (use HMAC — `CryptoJS.HmacSHA256`, or Node `crypto.createHmac`); constant-time secret comparison (use `crypto.timingSafeEqual`); `@mongez/cache` cache-key derivation that already wraps this; signatures over adversarial inputs.
+
 ```ts
 md5(text: string): string
 sha1(text: string): string
@@ -124,6 +133,9 @@ md5("")          === "d41d8cd98f00b204e9800998ecf8427e"
 
 ## setEncryptionConfigurations(opts) / getEncryptionConfig(key)
 
+> **Auto-trigger:** code imports `setEncryptionConfigurations`, `getEncryptionConfig`, or type `EncryptionConfigurations` from `@mongez/encryption`; user asks "how do I set a default encryption key / driver", "how do I configure encryption at boot", or "how does the per-call fallback work"; file does process-wide encryption setup (e.g. `src/setup/encryption.ts`) or wires `process.env.ENCRYPTION_KEY`.
+> **Skip when:** per-call usage of `encrypt`/`decrypt` without touching defaults — use `mongez-encryption-encrypt-decrypt`; HMAC/AEAD/JWT setup; password hashing config; `@mongez/cache` encryption-driver config (its own skill — note `@mongez/cache` has its own encrypted cache layer that wraps this); multi-tenant per-request keys (pass key explicitly instead).
+
 ```ts
 type EncryptionConfigurations = {
   key?: string;
@@ -139,6 +151,9 @@ getEncryptionConfig(key: keyof EncryptionConfigurations): any
 These are module-level globals; in multi-tenant servers (one key per request) prefer passing `key` explicitly per call to avoid leaking one tenant's key into another's flow.
 
 ## Patterns
+
+> **Auto-trigger:** code composes `encrypt` + `decrypt` + `sha256` + `setEncryptionConfigurations` together; user asks "how do I build an opaqued URL token", "how do I add integrity / tamper detection on top of this", "how do I tell apart `decrypt → null` from `value was null`", or "what's the right pattern for boot-time encryption setup"; file layers `HmacSHA256` over a cipher (encrypt-then-MAC).
+> **Skip when:** single-function API lookups (use the per-export skills `mongez-encryption-encrypt-decrypt`, `mongez-encryption-hashes`, `mongez-encryption-configuration`); first-time evaluation of the package — use `mongez-encryption-overview`; full AEAD via Node `crypto.createCipheriv("aes-256-gcm", …)` or libsodium; signed JWT / JWS flows; `@mongez/cache` encrypted entries (its own skill).
 
 ### Configured once, used everywhere
 

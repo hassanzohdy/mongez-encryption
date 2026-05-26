@@ -1,7 +1,9 @@
 ---
 name: mongez-encryption-overview
-description: High-level overview of @mongez/encryption — what it wraps, its security boundaries, mental model, and failure modes.
-when_to_use: User imports from @mongez/encryption for the first time, asks what the package does, wants to know if it is appropriate for a given use case, or asks about its security limitations.
+description: |
+  High-level overview of `@mongez/encryption` — what it wraps from `crypto-js`, its security boundaries, mental model, and failure modes.
+  TRIGGER when: code first imports anything from `@mongez/encryption` (`encrypt`, `decrypt`, `md5`, `sha1`, `sha256`, `sha512`, `setEncryptionConfigurations`, `getEncryptionConfig`, `EncryptionConfigurations`); user asks "what does @mongez/encryption do", "is @mongez/encryption secure for X", "can I store passwords / tokens / PII with this", or "should I use this or Node `crypto`"; file evaluates whether to adopt the package or audits its threat model.
+  SKIP: deep API reference on a specific export — use `mongez-encryption-encrypt-decrypt`, `mongez-encryption-hashes`, or `mongez-encryption-configuration`; ready-made composition patterns — use `mongez-encryption-recipes`; `@mongez/cache` encrypted entries — its own skill wraps this layer; questions strictly about `crypto-js` itself, libsodium, or Node `crypto`.
 ---
 
 # Overview

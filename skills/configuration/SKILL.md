@@ -1,7 +1,9 @@
 ---
 name: mongez-encryption-configuration
-description: How to configure @mongez/encryption module-level defaults using setEncryptionConfigurations and getEncryptionConfig.
-when_to_use: User calls setEncryptionConfigurations or getEncryptionConfig, asks how to set a default key or driver, wants to know merge semantics, or is setting up encryption at boot time.
+description: |
+  How to configure `@mongez/encryption` module-level defaults using `setEncryptionConfigurations` and `getEncryptionConfig`.
+  TRIGGER when: code imports `setEncryptionConfigurations`, `getEncryptionConfig`, or type `EncryptionConfigurations` from `@mongez/encryption`; user asks "how do I set a default encryption key / driver", "how do I configure encryption at boot", or "how does the per-call fallback work"; file does process-wide encryption setup (e.g. `src/setup/encryption.ts`) or wires `process.env.ENCRYPTION_KEY`.
+  SKIP: per-call usage of `encrypt`/`decrypt` without touching defaults — use `mongez-encryption-encrypt-decrypt`; HMAC/AEAD/JWT setup; password hashing config; `@mongez/cache` encryption-driver config (its own skill — note `@mongez/cache` has its own encrypted cache layer that wraps this); multi-tenant per-request keys (pass key explicitly instead).
 ---
 
 # Configuration

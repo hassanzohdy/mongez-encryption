@@ -1,7 +1,9 @@
 ---
 name: mongez-encryption-recipes
-description: Idiomatic composition patterns for @mongez/encryption — opaqued URL tokens, cache keys, HMAC integrity layering, and edge-case handling.
-when_to_use: User wants a complete working pattern using @mongez/encryption (URL tokens, cache keys, boot-time setup, HMAC layering, or distinguishing null decrypt from null value).
+description: |
+  Idiomatic composition patterns for `@mongez/encryption` — opaqued URL tokens, content-addressed cache keys, boot-time setup, switching driver, HMAC-layered integrity, throwaway one-shot keys, and distinguishing decrypt failure from a genuine `null` value.
+  TRIGGER when: code composes `encrypt` + `decrypt` + `sha256` + `setEncryptionConfigurations` together; user asks "how do I build an opaqued URL token", "how do I add integrity / tamper detection on top of this", "how do I tell apart `decrypt → null` from `value was null`", or "what's the right pattern for boot-time encryption setup"; file layers `HmacSHA256` over a cipher (encrypt-then-MAC).
+  SKIP: single-function API lookups (use the per-export skills `mongez-encryption-encrypt-decrypt`, `mongez-encryption-hashes`, `mongez-encryption-configuration`); first-time evaluation of the package — use `mongez-encryption-overview`; full AEAD via Node `crypto.createCipheriv("aes-256-gcm", …)` or libsodium; signed JWT / JWS flows; `@mongez/cache` encrypted entries (its own skill).
 ---
 
 # Recipes
