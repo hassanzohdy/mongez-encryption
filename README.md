@@ -1,198 +1,530 @@
+<div align="center">
+
 # @mongez/encryption
 
-> A thin wrapper around [crypto-js](https://www.npmjs.com/package/crypto-js) for symmetric encrypt/decrypt of JSON-encodable values and the common hash functions (`md5`, `sha1`, `sha256`, `sha512`).
+**A thin convenience layer over CryptoJS — one consistent `encrypt` / `decrypt` pair for JSON-encodable values, plus hex-encoded `md5` / `sha1` / `sha256` / `sha512` digests.**
 
-`@mongez/encryption` is a convenience layer, not a cryptography library. It exists so the rest of the Mongez family can pass values through one consistent `encrypt(value, key)` / `decrypt(cipher, key)` pair without each caller having to remember to `JSON.stringify`, pick a UTF-8 encoder, and handle decode failures.
+[![npm](https://img.shields.io/npm/v/@mongez/encryption.svg)](https://www.npmjs.com/package/@mongez/encryption)
+[![license](https://img.shields.io/npm/l/@mongez/encryption.svg)](LICENSE)
+[![bundle size](https://img.shields.io/bundlephobia/minzip/@mongez/encryption.svg)](https://bundlephobia.com/package/@mongez/encryption)
+[![downloads](https://img.shields.io/npm/dw/@mongez/encryption.svg)](https://www.npmjs.com/package/@mongez/encryption)
 
-## Security notice — read this first
+</div>
 
-These helpers are **NOT a substitute for purpose-built cryptography**. Understand the threat model before you reach for them.
+---
 
-| Concern | This package |
+## Why @mongez/encryption?
+
+Raw `crypto-js` gives you `AES.encrypt(text, key)` and asks you to remember the JSON wrapping, the UTF-8 decode, the `.toString()` call on its `CipherParams`, and the "what does a wrong key return" rule. Native `WebCrypto` is the right tool when you need AEAD — but it's async, requires you to derive a `CryptoKey`, manage IVs, choose modes, and encode/decode `ArrayBuffer`s into base64 by hand. `bcrypt` and `argon2` are for passwords, not for round-tripping a `{ orderId: 42 }` through a URL.
+
+`@mongez/encryption` is the smallest layer that gives you a synchronous, JSON-aware `encrypt(value, key)` / `decrypt(cipher, key)` pair on the browser side. One source file, one runtime dep (`crypto-js`), zero ceremony.
+
+```ts
+import { encrypt, decrypt, sha256 } from "@mongez/encryption";
+
+const cipher = encrypt({ userId: 42 }, "my-key"); // AES by default
+const value = decrypt(cipher, "my-key"); // { userId: 42 }
+const tag = sha256(JSON.stringify({ q: "phones" })); // stable cache key
+```
+
+> **Read this before reaching for it.** These helpers are for **browser-side symmetric obfuscation and content fingerprinting**, not for password storage, session integrity, PII at rest, or anything under a compliance regime. There is no authentication tag — ciphertext can be tampered with undetectably. For passwords use `bcrypt` / `scrypt` / `argon2` (preferably **Argon2id**); for authenticated encryption use Node `crypto` AES-GCM or libsodium; for signed tokens use JWT/JWS. See [Security boundaries](#security-boundaries) below.
+
+---
+
+## Features
+
+| Feature | Description |
 |---|---|
-| Authenticated encryption (AEAD) | No. `crypto-js`'s `AES.encrypt(text, passphrase)` runs AES-CBC with an MD5-based OpenSSL-style key derivation and a random salt. There is no authentication tag — ciphertext can be tampered with without detection. |
-| Modern key derivation | No. The OpenSSL-style KDF is one round of MD5 by default. For passphrase-derived keys you want PBKDF2/scrypt/argon2 with a tunable cost. |
-| Constant-time comparisons | No. Hash outputs are returned as hex strings; comparing them with `===` is not timing-safe. |
-| FIPS / regulated environments | No. `crypto-js` is a pure-JS implementation; it is not validated and uses primitives (MD5, SHA-1, AES-CBC without MAC) that are inappropriate for several modern compliance regimes. |
-| Salts / per-call IVs | crypto-js picks a fresh salt per call when the key is a passphrase string, so ciphertext is non-deterministic. No IV is exposed to the caller. |
+| **`encrypt` / `decrypt` pair** | JSON-stringify a value, hand it to a `crypto-js` cipher driver, get back a base64 string. Reverse the whole pipeline with `decrypt`. |
+| **Configurable key + driver** | Set defaults once with `setEncryptionConfigurations` or pass per-call. Defaults to `AES`. |
+| **Driver-agnostic** | Any object with `.encrypt(text, key)` / `.decrypt(cipher, key)` works — `AES`, `TripleDES`, `Rabbit`, `RC4` (don't), or your own. |
+| **Hash functions** | `md5`, `sha1`, `sha256`, `sha512` return lowercase hex digests. Stateless — no config. |
+| **`null` on decrypt failure** | Wrong key, malformed input, or empty string all return `null` instead of throwing. One uniform error path. |
+| **JSON-aware** | Primitives (`0`, `false`, `null`), arrays, plain objects, nested combinations all round-trip. |
+| **Synchronous** | No promises, no `await`. Suits storage adapters and SSR-free code paths. |
+| **TypeScript-first** | All exports typed; `EncryptionConfigurations` type for the config shape. |
+| **`sideEffects: false`** | Tree-shakeable for hash-only consumers, except for the AES import that backs the default driver. |
+| **Drops into `@mongez/cache`** | The `{ encrypt, decrypt }` pair is the contract `EncryptedLocalStorageDriver` expects. |
 
-**Use these helpers for** non-sensitive obfuscation that is convenient to round-trip through string form — opaquing query-string params, signing-free local storage payloads, masking values in logs, anything where the threat model is "casual reader" rather than "motivated attacker."
+---
 
-**Do NOT use these helpers for** passwords, session tokens, PII at rest, payment data, secrets in transit, anything subject to a compliance regime, or anywhere you need integrity guarantees. For those: reach for [`libsodium`](https://github.com/jedisjeu/libsodium.js), [Node `crypto`](https://nodejs.org/api/crypto.html) with AES-GCM, or a platform-managed KMS.
+## Installation
 
-The hash functions (`md5`, `sha1`, `sha256`, `sha512`) are unkeyed digests — they are useful for content fingerprinting and ETags. `md5` and `sha1` are **broken for collision resistance** and must not be used as integrity or signature primitives.
-
-## Install
+```sh
+npm install @mongez/encryption
+```
 
 ```sh
 yarn add @mongez/encryption
-# peer dep: crypto-js (already installed as a dependency)
 ```
 
-## A 30-second tour
+```sh
+pnpm add @mongez/encryption
+```
+
+`crypto-js` is a runtime dependency and ships transitively — no separate install required.
+
+---
+
+## Quick start
+
+```ts
+import {
+  encrypt,
+  decrypt,
+  md5,
+  sha256,
+  setEncryptionConfigurations,
+} from "@mongez/encryption";
+
+// 1. Per-call: pass key (and optional driver) explicitly.
+const cipher = encrypt({ userId: 42 }, "my-key");
+const value = decrypt(cipher, "my-key");
+// value === { userId: 42 }
+
+// 2. Or set defaults once at boot and call without arguments.
+setEncryptionConfigurations({ key: import.meta.env.VITE_APP_SECRET });
+
+encrypt("hello");                  // uses the configured key + AES
+decrypt(encrypt("hello"));         // → "hello"
+
+// 3. Hashes are stateless — no config needed.
+md5("123456");                     // "e10adc3949ba59abbe56e057f20f883e"
+sha256("123456");                  // "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"
+```
+
+That's the entire happy path. Everything below is depth on the same nine exports.
+
+---
+
+## Configuration
+
+`encrypt` and `decrypt` each accept an optional `key` and `driver`. To avoid threading them through every call site, set defaults once on the module.
 
 ```ts
 import AES from "crypto-js/aes";
-import { encrypt, decrypt, md5, sha256, setEncryptionConfigurations } from "@mongez/encryption";
+import {
+  setEncryptionConfigurations,
+  getEncryptionConfig,
+  encrypt,
+} from "@mongez/encryption";
 
-// 1. Per-call encrypt/decrypt — pass key and driver explicitly.
-const cipher = encrypt({ userId: 42 }, "my-key", AES);
-const value  = decrypt(cipher, "my-key", AES);
-// value === { userId: 42 }
+setEncryptionConfigurations({
+  key: import.meta.env.VITE_APP_SECRET,
+  driver: AES, // optional — AES is the import-time default
+});
 
-// 2. Or set defaults once and call without arguments.
-setEncryptionConfigurations({ key: "my-key", driver: AES });
-
-encrypt("hello");                    // uses the configured key + driver
-decrypt(encrypt("hello"));           // → "hello"
-
-// 3. Hash functions are stateless — no config needed.
-md5("123456");                       // "e10adc3949ba59abbe56e057f20f883e"
-sha256("123456");                    // "8d969eef…"
+encrypt({ a: 1 }); // no args needed — uses the configured pair
 ```
 
-## What's in the box
+### `EncryptionConfigurations`
 
-| Export | Purpose |
-|---|---|
-| `encrypt(value, key?, driver?)` | JSON-stringify `value`, encrypt with `driver`, return a base64 cipher. |
-| `decrypt(cipher, key?, driver?)` | Decrypt with `driver`, JSON-parse, return the original value. Returns `null` on failure. |
-| `md5(text)` | Hex-encoded MD5 digest. **Not collision-resistant.** |
-| `sha1(text)` | Hex-encoded SHA-1 digest. **Not collision-resistant.** |
-| `sha256(text)` | Hex-encoded SHA-256 digest. |
-| `sha512(text)` | Hex-encoded SHA-512 digest. |
-| `setEncryptionConfigurations(opts)` | Set the module-level default `key` and `driver`. |
-| `getEncryptionConfig(key)` | Read one configuration value. |
-| `type EncryptionConfigurations` | `{ key?: string; driver?: any }`. |
+| Option | Default | Effect |
+|---|---|---|
+| `key` | `null` | Default passphrase / key string used by `encrypt` and `decrypt` when the caller omits it. |
+| `driver` | `crypto-js/aes` | Default cipher module. Must expose `.encrypt(text, key)` and `.decrypt(cipher, key)`. |
 
-Every export ships from the package root — no subpath entry points.
+### Merge semantics
 
-## How encrypt / decrypt work
+`setEncryptionConfigurations` shallow-merges over the current state. Calling it twice with only `{ key }` keeps the previously set `driver`.
 
-`encrypt(value, key, driver)`:
+```ts
+setEncryptionConfigurations({ key: "k1" });          // { key: "k1", driver: AES }
+setEncryptionConfigurations({ driver: TripleDES });  // { key: "k1", driver: TripleDES }
+setEncryptionConfigurations({ key: undefined });     // { key: undefined, driver: TripleDES }
+```
 
-1. Wraps the input as `{ data: value }` so primitives (`0`, `false`, `null`) survive JSON encoding.
+> `undefined` keys ARE written through. Passing `{ key: undefined }` erases any previously set key — this is a property of the shallow merge, not a quirk to rely on.
+
+### Reading the config
+
+```ts
+getEncryptionConfig("key");    // current default key (or null)
+getEncryptionConfig("driver"); // current default driver (AES if untouched)
+```
+
+### Multi-tenant servers — prefer explicit per-call
+
+The configuration is process-global. Two concurrent requests with different per-tenant keys would race:
+
+```ts
+// DON'T do this in a request handler:
+setEncryptionConfigurations({ key: req.user.tenantKey });
+return encrypt(payload);
+
+// DO this instead:
+return encrypt(payload, req.user.tenantKey, AES);
+```
+
+Treat `setEncryptionConfigurations` as boot-time setup, not request-time state.
+
+---
+
+## Encrypt / decrypt
+
+Symmetric, passphrase-keyed, AES-CBC under the hood. Returns a base64 string. Reverses to the original JS value.
+
+### Signatures
+
+```ts
+encrypt(value: any, key?: string, driver?: any): string
+decrypt(cipher: string, key?: string, driver?: any): any | null
+```
+
+`key` and `driver` fall back to the configured defaults. `encrypt` and `decrypt` both throw `"Missing Encryption key, please define it or set it in encryption configurations"` when neither a per-call key nor a configured default exists.
+
+### Round-trip semantics
+
+```ts
+import { encrypt, decrypt } from "@mongez/encryption";
+
+const cipher = encrypt({ userId: 42 }, "my-key");
+const value = decrypt(cipher, "my-key");
+// value === { userId: 42 }
+```
+
+Reversible for any JSON-encodable value — primitives, arrays, plain objects, nested combinations, unicode.
+
+### How `encrypt` works (internals)
+
+1. Wraps the input as `{ data: value }`. The wrapper forces a consistent shape `decrypt` can rely on and makes primitives like `0`, `false`, and `null` survive the round trip.
 2. `JSON.stringify`s the wrapper.
-3. Hands the result to `driver.encrypt(plaintext, key)` — typically `AES` from `crypto-js`.
-4. Returns the ciphertext as a base64 string (via `toString()` on crypto-js's `CipherParams`).
+3. Calls `driver.encrypt(plaintext, key)` and returns `.toString()` on the result — a base64 string with the OpenSSL `Salted__` prefix when using AES with a passphrase key.
 
-`decrypt(cipher, key, driver)`:
+### How `decrypt` works (internals)
 
-1. Calls `driver.decrypt(cipher, key)` and decodes to UTF-8.
-2. Returns `null` if the decoded plaintext is empty (wrong key → crypto-js silently yields `""`).
+1. Calls `driver.decrypt(cipher, key)` and decodes the bytes to UTF-8.
+2. If the decoded plaintext is empty (wrong key → crypto-js silently yields `""`), returns `null`.
 3. `JSON.parse`s the plaintext and returns the `.data` property.
 4. Any thrown error (invalid base64, malformed JSON) is caught, logged via `console.warn`, and the function returns `null`.
 
-A few consequences:
+### Failure modes
 
-- **Wrong key** → `null` (not an exception). If you need to detect tampering or wrong-key situations explicitly, this wrapper cannot do it — you would need authenticated encryption.
-- **`undefined` round-trips to `undefined`**: `JSON.stringify({ data: undefined })` is `"{}"`, which parses back to `{}`, and `.data` on that is `undefined`.
-- **Circular references throw** at `JSON.stringify` time, before any encryption happens.
-- **The cipher is non-deterministic** for AES with a passphrase key — each call to `encrypt` uses a fresh salt.
+| Situation | Behavior |
+|---|---|
+| Wrong key | `decrypt` returns `null`. **Cannot be distinguished** from tampered cipher or malformed input — the wrapper has no authentication tag. |
+| Tampered cipher | Returns `null` for corrupted bytes. There is no MAC to check, so cleverly-crafted tampers may decode to arbitrary values. |
+| Empty / non-base64 cipher | Returns `null`; a `console.warn` is emitted with the underlying error. |
+| Falsy key (per-call AND config) | Both functions throw `"Missing Encryption key…"`. |
+| Circular reference in `value` | `encrypt` throws synchronously from `JSON.stringify` before any cipher work happens. |
+| `undefined` value | Round-trips as `undefined` (`JSON.stringify({ data: undefined })` is `"{}"`; `JSON.parse("{}").data` is `undefined`). |
+| `function` value | Same as `undefined` — functions are dropped at JSON time. |
 
-## Encryption configurations
-
-To avoid threading the key and driver through every call site:
-
-```ts
-import AES from "crypto-js/aes";
-import { encrypt, decrypt, setEncryptionConfigurations } from "@mongez/encryption";
-
-setEncryptionConfigurations({
-  key: process.env.ENCRYPTION_KEY!,
-  driver: AES,
-});
-
-encrypt({ userId: 42 });             // uses the configured pair
-decrypt(cipher);                     // same
-```
-
-Notes:
-
-- `setEncryptionConfigurations` shallow-merges over the existing defaults. Calling it twice with only `{ key }` keeps the previously set `driver`.
-- The default `driver` (set at import time) is `AES` — so if you only need AES, you only need to set the key.
-- These are module-level globals. In a multi-tenant server (different keys per request) pass the key explicitly per call instead.
-
-## Hash functions
-
-All four return a lowercase hex string.
+### Non-determinism
 
 ```ts
-import { md5, sha1, sha256, sha512 } from "@mongez/encryption";
-
-md5("123456");      // "e10adc3949ba59abbe56e057f20f883e"
-sha1("123456");     // "7c4a8d09ca3762af61e59520943dc26494f8941b"
-sha256("123456");   // "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"
-sha512("123456");   // "ba3253876aed6bc22d4a6ff53d8406c6ad864195ed144ab5c87621b6c233b548…"
+encrypt("hello", "k") === encrypt("hello", "k");
+// false — crypto-js picks a fresh salt each call
 ```
 
-Use cases that fit:
+Both ciphers decrypt to `"hello"`. **Do not compare ciphertexts for equality.** If you need a stable token for the same input, hash it (`sha256`) and use the digest as the comparison key.
 
-- ETags / cache keys / content addressing → any of the four.
-- Idempotency keys → `sha256` or `sha512`.
-
-Use cases that do NOT fit:
-
-- Password hashing → use `bcrypt` / `argon2` / `scrypt`. Plain hashes are too fast and lack salting.
-- Message authentication → use HMAC-SHA256 (crypto-js provides it directly: `CryptoJS.HmacSHA256`) or AEAD.
-- Equality checks on secret material → use a constant-time comparison.
-
-## Examples
-
-### Opaquing a query-string parameter
-
-```ts
-import AES from "crypto-js/aes";
-import { encrypt, decrypt } from "@mongez/encryption";
-
-const token = encrypt({ orderId: 4242, exp: Date.now() + 3600_000 }, KEY, AES);
-const url = `/orders?t=${encodeURIComponent(token)}`;
-
-// Later, server side:
-const claims = decrypt(decodeURIComponent(t), KEY, AES);
-if (!claims) throw new Error("invalid token");
-```
-
-**Treat the result like an opaque-but-unauthenticated cookie**: an attacker who modifies the ciphertext gets garbage back (which decrypts as `null`), but cannot be detected lying about the structure when they bring a stolen-then-tampered token. Use a signed JWT or HMAC if you need integrity.
-
-### Choosing a different driver
+### Switching driver
 
 ```ts
 import TripleDES from "crypto-js/tripledes";
-import { encrypt, decrypt, setEncryptionConfigurations } from "@mongez/encryption";
+import { encrypt, decrypt } from "@mongez/encryption";
 
-setEncryptionConfigurations({ key: "k", driver: TripleDES });
-const c = encrypt("hello");
-const v = decrypt(c);   // "hello"
+const c = encrypt("hello", "k", TripleDES);
+const v = decrypt(c, "k", TripleDES); // "hello"
 ```
 
 Any `crypto-js` cipher module with `.encrypt(text, key)` / `.decrypt(cipher, key)` works as a driver: `AES`, `TripleDES`, `Rabbit`, `RC4` (don't), `RC4Drop`. Prefer `AES`.
 
-### Content-addressed cache keys
+---
+
+## Hash functions
+
+Four hex-encoded digests: `md5`, `sha1`, `sha256`, `sha512`. All four take a string and return a lowercase hex string. No configuration, no module setup — direct passthroughs to `CryptoJS.MD5/SHA1/SHA256/SHA512` with `.toString()`.
+
+### Signatures
+
+```ts
+md5(text: string):    string
+sha1(text: string):   string
+sha256(text: string): string
+sha512(text: string): string
+```
+
+### Test vectors
+
+```ts
+md5("");          // "d41d8cd98f00b204e9800998ecf8427e"
+md5("123456");    // "e10adc3949ba59abbe56e057f20f883e"
+sha1("");         // "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+sha1("123456");   // "7c4a8d09ca3762af61e59520943dc26494f8941b"
+sha256("");       // "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+sha256("123456"); // "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"
+sha512("123456"); // "ba3253876aed6bc22d4a6ff53d8406c6ad864195ed144ab5c87621b6c233b548…"
+```
+
+Unicode is encoded as UTF-8 before hashing — outputs match the standard test vectors for that scheme.
+
+### Suitable uses
+
+- **Content fingerprints** — static-asset dedup, build-output integrity (against wire corruption, not adversaries).
+- **Cache keys / ETags** — `sha256(JSON.stringify(query))` makes a stable cache key for a complex input.
+- **Idempotency keys** — `sha256(payload)` derives a stable key so retries collapse into one operation.
+- **Bloom filter / probabilistic structure inputs.**
+
+### Unsuitable uses
+
+| Use case | Why these hashes don't fit | What to use instead |
+|---|---|---|
+| Password storage | Too fast; lack per-record salt; vulnerable to GPU brute force. | `bcrypt`, `scrypt`, or **Argon2id** |
+| Message authentication | Plain hashes don't bind a secret. | HMAC — `crypto-js/hmac-sha256`, or Node `crypto.createHmac` |
+| Digital signatures over adversarial inputs | `md5` and `sha1` are **broken for collision resistance**. | `sha256` + a signing primitive (RSA-PSS, Ed25519), or JWS |
+| Constant-time equality of secrets | `===` on hex strings leaks length / timing. | `crypto.timingSafeEqual` (Node) |
+| FIPS or regulatory validation | Pure-JS, unvalidated. | A vetted library or a managed KMS |
+
+> **`md5` and `sha1` have practical collision attacks.** For non-adversarial fingerprinting (ETags, deduplicating your own files) that's fine — collisions don't appear by chance. For anything where an attacker controls part of the input, default to `sha256`.
+
+---
+
+## Security boundaries
+
+The single most important thing about this package: pick the right tool for the threat. The table below is the actual capability surface, not a marketing claim.
+
+| Concern | This package |
+|---|---|
+| Authenticated encryption (AEAD / tamper detection) | **No.** `crypto-js` `AES.encrypt(text, passphrase)` is AES-CBC + OpenSSL-style MD5 KDF + random salt. Ciphertext can be tampered with undetectably. |
+| Modern key derivation | **No.** OpenSSL-style KDF is one round of MD5. For passphrase-derived keys you want PBKDF2 / scrypt / argon2 with a tunable cost. |
+| Salts / IVs | crypto-js picks a fresh salt per call when the key is a passphrase string. Cipher is non-deterministic. No IV exposed to the caller. |
+| Constant-time digest comparison | **No.** Outputs are hex strings; `===` is not timing-safe. |
+| `md5` / `sha1` collision resistance | **Broken.** Suitable for fingerprinting / ETags only. |
+| FIPS / regulated compliance | **No.** Pure-JS, not validated; uses primitives (MD5, SHA-1, AES-CBC without MAC) that several regimes disallow. |
+
+> **Reach for it when**: opaquing query-string params, masking values in logs, signing-free local-storage payloads, encrypted browser-side cache entries, non-sensitive round-trips through string form. Threat model: "casual reader," not "motivated attacker."
+
+> **Do NOT reach for it when**: passwords (use `bcrypt` / `scrypt` / **Argon2id**), session integrity (use a signed JWT/JWS), PII at rest in regulated systems, payment data, anything subject to a compliance regime, anywhere you need integrity guarantees. For server-side authenticated encryption use Node `crypto` AES-GCM or libsodium; for managed keys reach for a KMS.
+
+---
+
+## Integration with `@mongez/cache`
+
+`@mongez/encryption` is the reference implementation of the `{ encrypt, decrypt }` contract that [`@mongez/cache`](https://github.com/hassanzohdy/cache)'s encrypted drivers expect. Drop the pair into the driver's `encryption` slot and every value written through the cache becomes ciphertext on disk.
+
+```ts
+import {
+  encrypt,
+  decrypt,
+  setEncryptionConfigurations,
+} from "@mongez/encryption";
+import cache, {
+  EncryptedLocalStorageDriver,
+  setCacheConfigurations,
+} from "@mongez/cache";
+
+setEncryptionConfigurations({ key: import.meta.env.VITE_APP_SECRET });
+
+setCacheConfigurations({
+  driver: new EncryptedLocalStorageDriver(),
+  encryption: { encrypt, decrypt },
+});
+
+cache.set("auth.accessToken", "abc123");
+// On disk: { "auth.accessToken": "U2FsdGVkX18..." }  ← ciphertext
+cache.get("auth.accessToken"); // "abc123" — decrypted transparently
+```
+
+The cache reads `{ encrypt, decrypt }` from its configuration on every call, so you can rotate the encryption key (re-run `setEncryptionConfigurations`) without rebuilding driver instances.
+
+> **`@mongez/cache` is browser-side, and so is this encrypted layer.** Anyone with `window` access (extensions, devtools, injected scripts) can still observe `encrypt` calls in memory. Encrypted local-storage raises the bar against passive disk readers — it does **not** turn the browser into a trust boundary. For real secret material, the secret should never reach the browser in the first place.
+
+---
+
+## Recipes
+
+### Encrypt auth tokens at rest
+
+Tokens, refresh tokens, and PII should never sit in plaintext `localStorage` — any extension or injected script with `window` access can read them. Layer `EncryptedLocalStorageDriver` over this package's `encrypt`/`decrypt`.
+
+```ts
+import {
+  encrypt,
+  decrypt,
+  setEncryptionConfigurations,
+} from "@mongez/encryption";
+import cache, {
+  EncryptedLocalStorageDriver,
+  setCacheConfigurations,
+} from "@mongez/cache";
+
+setEncryptionConfigurations({ key: import.meta.env.VITE_APP_SECRET });
+
+setCacheConfigurations({
+  driver: new EncryptedLocalStorageDriver(),
+  encryption: { encrypt, decrypt },
+  expiresAfter: 60 * 60, // 1-hour default for tokens
+});
+
+cache.set("auth.accessToken", accessToken);
+cache.set("auth.refreshToken", refreshToken, 60 * 60 * 24 * 30); // 30 days
+
+// On reload, transparently decrypted:
+const accessToken = cache.get("auth.accessToken");
+```
+
+> **This is obfuscation, not a vault.** A motivated attacker with `window` access can still call `decrypt` themselves. The win is against passive disk-state inspection, browser-extension scrapers, and casual `localStorage` peeks. For truly sensitive material, keep it server-side and exchange short-lived tokens.
+
+### Hash filenames for cache busting
+
+Static assets need a content-derived suffix so a redeploy invalidates the browser cache without manual versioning. `sha256` over the file contents (or the build manifest) gives you a deterministic, collision-safe key.
+
+```ts
+import { readFileSync } from "node:fs";
+import { sha256 } from "@mongez/encryption";
+
+function hashedAssetName(srcPath: string) {
+  const contents = readFileSync(srcPath, "utf8");
+  const digest = sha256(contents).slice(0, 10); // 40 bits is enough
+  const ext = srcPath.split(".").pop();
+  return `${srcPath.replace(/\.[^.]+$/, "")}.${digest}.${ext}`;
+}
+
+hashedAssetName("dist/app.js");
+// → "dist/app.a1b2c3d4e5.js"
+```
+
+Identical files always get the same digest; any byte change produces a new name. Use the first 10 hex chars (40 bits) for filename brevity — the collision space is still 2^40, ample for an asset pipeline.
+
+### Build an opaqued URL token
+
+Wrap a value so it isn't human-readable in the URL bar or query log. This is **obfuscation, not authentication** — an attacker who tampers with the token gets `null` back, but cannot be detected forging a different valid-looking ciphertext.
+
+```ts
+import { encrypt, decrypt } from "@mongez/encryption";
+
+const KEY = import.meta.env.VITE_URL_TOKEN_KEY;
+
+function makeToken(payload: { orderId: number; exp: number }) {
+  const cipher = encrypt(payload, KEY);
+  return encodeURIComponent(cipher);
+}
+
+function readToken(raw: string) {
+  const payload = decrypt(decodeURIComponent(raw), KEY);
+  if (!payload) return null; // wrong key, garbage, or tamper — indistinguishable
+  if (payload.exp < Date.now()) return null;
+  return payload;
+}
+```
+
+> **If forgery matters, use a signed JWT or layer HMAC** (see the next recipe). This recipe stops casual users from reading and changing the token; it does not stop an attacker who specifically crafts ciphertext.
+
+### Add integrity with HMAC (encrypt-then-MAC)
+
+The package intentionally does NOT provide authenticated encryption. If your threat model requires it and you cannot move to AES-GCM, layer HMAC explicitly using `crypto-js/hmac-sha256`. Use two separate keys.
+
+```ts
+import HmacSHA256 from "crypto-js/hmac-sha256";
+import { encrypt, decrypt } from "@mongez/encryption";
+
+function seal(value: unknown, encKey: string, macKey: string) {
+  const cipher = encrypt(value, encKey);
+  const tag = HmacSHA256(cipher, macKey).toString();
+  return `${cipher}.${tag}`;
+}
+
+function open(sealed: string, encKey: string, macKey: string) {
+  const dot = sealed.lastIndexOf(".");
+  if (dot < 0) return null;
+  const cipher = sealed.slice(0, dot);
+  const tag = sealed.slice(dot + 1);
+  const expected = HmacSHA256(cipher, macKey).toString();
+  if (tag !== expected) return null; // NOTE: not constant-time
+  return decrypt(cipher, encKey);
+}
+```
+
+> Caveats: (1) the `tag !== expected` check is **not constant-time** — swap in `crypto.timingSafeEqual` for a real production deployment. (2) `encKey` and `macKey` must be different keys; never reuse one secret for both. (3) Encrypt-then-MAC ordering (verify the tag before decrypting) is what this snippet implements — don't flip it.
+
+> If you're writing this much code around the package, you're past its threat model. Move to AES-256-GCM via Node `crypto.createCipheriv` — confidentiality and integrity in one primitive. `crypto-js` does not provide GCM mode.
+
+### Distinguish "decrypt failed" from "value was `null`"
+
+`decrypt` returns `null` for both wrong-key/tampered input and a legitimately encrypted `null`. To tell them apart, wrap the value at encrypt time so a successful round-trip produces an object, not `null`.
+
+```ts
+import { encrypt, decrypt } from "@mongez/encryption";
+
+function store(value: unknown, key: string) {
+  return encrypt({ value }, key); // explicit wrapper
+}
+
+function load(cipher: string, key: string) {
+  const out = decrypt(cipher, key);
+  if (out === null) {
+    return { ok: false as const }; // wrong key / tampered / garbage
+  }
+  return { ok: true as const, value: out.value }; // value may still be null
+}
+
+const sealed = store(null, "k");
+load(sealed, "k");      // { ok: true, value: null } — round-trip succeeded
+load("garbage", "k");   // { ok: false }              — failed
+```
+
+### Boot-time setup for a single-tenant app
+
+The most common shape: one app, one key, every call site uses the configured pair.
+
+```ts
+// src/setup/encryption.ts — imported first by your entry point.
+import { setEncryptionConfigurations } from "@mongez/encryption";
+
+const key = import.meta.env.VITE_APP_SECRET;
+if (!key) {
+  throw new Error("VITE_APP_SECRET is required");
+}
+
+setEncryptionConfigurations({ key });
+```
+
+```ts
+// src/anywhere.ts
+import { encrypt, decrypt } from "@mongez/encryption";
+
+const c = encrypt({ a: 1 }); // no args — uses the configured key + AES
+const v = decrypt(c);        // { a: 1 }
+```
+
+Crash loudly at boot if the key is missing — never silently fall through to the throw inside `encrypt`. For multi-tenant servers, skip the global config and pass the per-tenant key as the second argument every call.
+
+### Build a content-addressed cache key
+
+Same input → same digest. Use this for deterministic cache keys, ETags, idempotency keys, or any "fingerprint a complex value" need.
 
 ```ts
 import { sha256 } from "@mongez/encryption";
 
-const key = `tile:${sha256(JSON.stringify(query))}`;
+function cacheKey(query: unknown) {
+  // JSON.stringify property order can vary across engines for object literals
+  // with computed keys — sort if you need a truly canonical form.
+  return `q:${sha256(JSON.stringify(query))}`;
+}
+
+const key = cacheKey({ user: 42, scope: "orders" });
+// → "q:8d4f…" — stable across calls with equivalent input
 ```
 
-## What this package does NOT do
+For idempotency, hash the request body and short-circuit retries that produce the same key. For ETags, hash the response body and compare against the `If-None-Match` header.
 
-- Authenticated encryption (AEAD), MAC, or signatures → use `crypto.createCipheriv("aes-256-gcm", …)`, libsodium, or a JWT/JWS library.
-- Password hashing → use `bcrypt`, `scrypt`, or `argon2`.
-- Key derivation from passphrases → use `crypto.scryptSync`, PBKDF2 with a high iteration count, or argon2.
-- Random IDs / UUIDs → use `crypto.randomUUID` or `nanoid`.
-- Public-key crypto → use Node `crypto.generateKeyPair` or libsodium.
+---
 
 ## Related packages
 
-| Package | Purpose |
+| Package | Use when you need |
 |---|---|
-| [`@mongez/atom`](https://github.com/hassanzohdy/atom) | State primitive with action verbs. |
-| [`@mongez/events`](https://github.com/hassanzohdy/events) | Tiny event bus. |
-| [`@mongez/reinforcements`](https://github.com/hassanzohdy/reinforcements) | TypeScript utility belt. |
-| [`@mongez/cache`](https://github.com/hassanzohdy/cache) | Pluggable cache adapters. |
+| [`@mongez/cache`](https://github.com/hassanzohdy/cache) | A pluggable browser cache facade. Drop this package's `{ encrypt, decrypt }` into the `EncryptedLocalStorageDriver` for transparently encrypted at-rest values. |
+| [`@mongez/atom`](https://github.com/hassanzohdy/atom) | Reactive state primitive. Pairs with `@mongez/cache` for encrypted persistence — every atom that opts into the cache's `persist` adapter gets encrypted storage with zero changes at the call site. |
+| [`@mongez/dotenv`](https://github.com/hassanzohdy/dotenv) | Typed `.env` loader. Use it to source `ENCRYPTION_KEY` / `VITE_APP_SECRET` at boot. |
+| [`@mongez/events`](https://github.com/hassanzohdy/events) | Tiny event bus. Useful when you want write-through subscriptions on top of an encrypted cache. |
+
+For the full API reference in a single LLM-friendly file, see [`llms-full.txt`](./llms-full.txt). For release history, see [`CHANGELOG.md`](./CHANGELOG.md).
+
+---
 
 ## License
 
-MIT
+MIT — see [LICENSE](./LICENSE).
