@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [18, 20, 22]
+        node: [20, 22]
         os: [ubuntu-latest]
         # Also smoke-test the supported LTS on Windows so path/CRLF
         # regressions are caught before they ship.

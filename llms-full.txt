@@ -4,7 +4,7 @@
 
 Install: `yarn add @mongez/encryption` or `npm i @mongez/encryption`.
 
-**v2.0 is a breaking security release.** `encrypt`/`decrypt` are now async, `decrypt` throws instead of returning `null`, the pluggable cipher `driver` is removed, v1.x ciphertext is rejected unless explicitly enabled, and there is a Node 18+/secure-context runtime floor. See "Migration" below.
+**v2.0 is a breaking security release.** `encrypt`/`decrypt` are now async, `decrypt` throws instead of returning `null`, the pluggable cipher `driver` is removed, v1.x ciphertext is rejected unless explicitly enabled, and there is a Node 20+/secure-context runtime floor. See "Migration" below.
 
 ## Public exports
 
@@ -76,7 +76,7 @@ All exports ship from the package root — no subpath entry points. The WebCrypt
 
 `encrypt`/`decrypt` need `globalThis.crypto.subtle` and `crypto.getRandomValues`:
 
-- **Node.js 18+** — available as a global.
+- **Node.js 20+** — available as a global.
 - **Browser in a secure context** — HTTPS or `http://localhost`. Plain-HTTP origins do not expose `crypto.subtle`.
 - **Node.js ≤ 16, insecure browser contexts, bare React Native/Hermes** — throw `UnsupportedRuntimeError`. Upgrade, or install a WebCrypto polyfill providing both `subtle` and `getRandomValues`.
 - **Jest with the default jsdom environment** — older jsdom has no `crypto.subtle`; use the `node` environment or inject `require("node:crypto").webcrypto`.
@@ -480,7 +480,7 @@ A missed `await` is not always a type error — it silently stores `[object Prom
 
 **4. v1 ciphertext is off by default.** Enable `legacyDecryption` for the migration window only; treat what you read as unauthenticated; re-encrypt; turn it off.
 
-**5. Node 18+ or a secure browser context**, else `UnsupportedRuntimeError`.
+**5. Node 20+ or a secure browser context**, else `UnsupportedRuntimeError`.
 
 ## Ordered rollout
 

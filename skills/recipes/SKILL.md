@@ -48,7 +48,7 @@ try {
   }
 
   if (error instanceof UnsupportedRuntimeError) {
-    // Insecure browser context or a runtime older than Node 18. A deployment
+    // Insecure browser context or a runtime older than Node 20. A deployment
     // fault; let it surface.
     throw error;
   }

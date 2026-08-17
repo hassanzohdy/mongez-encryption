@@ -52,7 +52,7 @@ npm install @mongez/encryption
 
 ## Runtime requirement
 
-`encrypt`/`decrypt` need WebCrypto: **Node.js 18+**, or a browser in a **secure context** (HTTPS or `localhost`). Plain-HTTP origins and Node ≤ 16 have no `crypto.subtle` and throw `UnsupportedRuntimeError`. React Native/Hermes needs a polyfill exposing both `subtle` and `getRandomValues`. Jest's default jsdom environment may need the `node` environment or an injected `require("node:crypto").webcrypto`.
+`encrypt`/`decrypt` need WebCrypto: **Node.js 20+**, or a browser in a **secure context** (HTTPS or `localhost`). Plain-HTTP origins and Node ≤ 16 have no `crypto.subtle` and throw `UnsupportedRuntimeError`. React Native/Hermes needs a polyfill exposing both `subtle` and `getRandomValues`. Jest's default jsdom environment may need the `node` environment or an injected `require("node:crypto").webcrypto`.
 
 The hash exports have no such requirement.
 

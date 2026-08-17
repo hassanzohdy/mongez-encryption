@@ -49,10 +49,10 @@ What you get, concretely:
 
 | Runtime | Status |
 |---|---|
-| Node.js 18+ | ✅ `crypto.subtle` is a global |
+| Node.js 20+ | ✅ `crypto.subtle` is a global |
 | Browser over HTTPS or `localhost` | ✅ secure context, `crypto.subtle` present |
 | Browser over plain HTTP (non-localhost) | ❌ `crypto.subtle` is undefined — `UnsupportedRuntimeError` |
-| Node.js < 18 | ❌ no global `crypto` — `UnsupportedRuntimeError` |
+| Node.js < 20 | ❌ no global `crypto` — `UnsupportedRuntimeError` |
 | React Native / Hermes | ⚠️ needs a WebCrypto polyfill exposing `crypto.subtle` **and** `crypto.getRandomValues` |
 
 The hash functions (`md5`/`sha1`/`sha256`/`sha512`) are pure `crypto-js` and work anywhere; only `encrypt`/`decrypt` need WebCrypto.

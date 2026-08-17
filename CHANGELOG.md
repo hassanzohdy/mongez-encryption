@@ -1,5 +1,9 @@
 # Changelog — @mongez/encryption
 
+## [2.0.1] — 2026-08-17
+
+Require Node 20+ (drop EOL Node 18; WebCrypto global unavailable by default before Node 19). No API change.
+
 ## [2.0.0] — 2026-08-17 — Security release (MAJOR)
 
 `encrypt`/`decrypt` are rebuilt on WebCrypto **AES-256-GCM** with **PBKDF2-HMAC-SHA256** key derivation and a versioned, authenticated envelope. This replaces the `crypto-js` AES-CBC construction v1.x used, which had **no authentication tag and a one-round-MD5 key derivation**. Every point below follows from that change. Upgrade guide: [`MIGRATION.md`](./MIGRATION.md).

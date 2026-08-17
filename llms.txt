@@ -26,7 +26,7 @@ Every export ships from the package root.
 
 ## Runtime requirement
 
-`encrypt`/`decrypt` need WebCrypto: **Node.js 18+**, or a browser in a **secure context** (HTTPS or `localhost`). Missing `crypto.subtle` or `crypto.getRandomValues` throws `UnsupportedRuntimeError` — there is no fallback, by design. The hash exports work anywhere.
+`encrypt`/`decrypt` need WebCrypto: **Node.js 20+**, or a browser in a **secure context** (HTTPS or `localhost`). Missing `crypto.subtle` or `crypto.getRandomValues` throws `UnsupportedRuntimeError` — there is no fallback, by design. The hash exports work anywhere.
 
 ## Docs
 
@@ -59,7 +59,7 @@ Every export ships from the package root.
 8. **The passphrase is the whole security boundary.** PBKDF2 does not rescue a short secret, and a key shipped to a browser is not secret from the browser.
 9. **The envelope carries no key ID and no caller AAD.** Rotation = re-encrypt; if a ciphertext must belong to a specific record, put that identity inside the value and verify it after decrypting.
 10. **`md5`/`sha1` are collision-broken** and now `@deprecated` in JSDoc. Fingerprints and cache keys only; default to `sha256`.
-11. **Node 18+ or a secure browser context.** Otherwise `UnsupportedRuntimeError` — there is no insecure fallback.
+11. **Node 20+ or a secure browser context.** Otherwise `UnsupportedRuntimeError` — there is no insecure fallback.
 12. **`@mongez/cache`'s encrypted drivers are sync** and are incompatible with v2's async pair; see the migration guide.
 
 ## Optional
