@@ -1,5 +1,10 @@
 # Changelog — @mongez/encryption
 
+## [2.0.2] — 2026-09-25
+
+### Changed
+- Added a grouped Agent Kit skills index for topic-based discovery.
+
 ## [2.0.1] — 2026-08-17
 
 Require Node 20+ (drop EOL Node 18; WebCrypto global unavailable by default before Node 19). No API change.

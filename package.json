@@ -1,6 +1,6 @@
 {
   "name": "@mongez/encryption",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Authenticated encryption for JSON-encodable values using WebCrypto AES-256-GCM with PBKDF2 key derivation, plus the common hash functions (md5, sha1, sha256, sha512) and a legacy crypto-js decrypt path.",
   "main": "src/index.ts",
   "sideEffects": false,
